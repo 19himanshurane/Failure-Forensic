@@ -40,6 +40,12 @@ CONFIDENCE_DROP_THRESHOLD = 2
 _LLM_STEPS = ("extraction", "classification", "summarization")
 
 
+def _count(n: int, noun: str) -> str:
+    """Renders as '1 fact' or '2 facts' rather than a 'fact(s)' placeholder.
+    Every noun this module counts pluralizes with a plain 's'."""
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
 def _llm_spans(spans: tuple[Span, ...]) -> list[Span]:
     return [s for s in spans if s.step in _LLM_STEPS]
 
@@ -66,12 +72,14 @@ def _step_problem(step: str, trace: Trace) -> Diagnosis | None:
         if not bad:
             return None
         names = ", ".join(repr(e.value) for e in bad)
+        noun = "entity" if len(bad) == 1 else "entities"
+        verb = "doesn't" if len(bad) == 1 else "don't"
         return Diagnosis(
             category=FailureCategory.EXTRACTION_HALLUCINATION,
             step="extraction",
             explanation=(
-                f"Step 2 (Extraction) invented {len(bad)} entit{'y' if len(bad) == 1 else 'ies'} "
-                f"that do not appear in the source document: {names}."
+                f"Extraction invented {len(bad)} {noun} that {verb} appear "
+                f"in the source document: {names}."
             ),
             evidence=tuple(
                 f"{e.value!r} is quoted as {e.source_quote!r}, which is not found in the document"
@@ -88,8 +96,8 @@ def _step_problem(step: str, trace: Trace) -> Diagnosis | None:
             category=FailureCategory.MISCLASSIFICATION,
             step="classification",
             explanation=(
-                f"Step 3 (Classification) chose {c.doc_type.value} over {runner_up} "
-                f"by a margin of only {c.margin:.2f}, too close to call reliably."
+                f"Classification chose {c.doc_type.value} over {runner_up} by a "
+                f"margin of only {c.margin:.2f}, too close to call reliably."
             ),
             evidence=(c.reasoning,) if c.reasoning else (),
         )
@@ -103,8 +111,8 @@ def _step_problem(step: str, trace: Trace) -> Diagnosis | None:
             category=FailureCategory.CONTEXT_LOSS,
             step="summarization",
             explanation=(
-                f"Step 4 (Summarization) dropped {len(dropped)} fact(s) that step 2 had "
-                f"already extracted with confidence: {names}."
+                f"Summarization dropped {_count(len(dropped), 'fact')} that "
+                f"extraction had already found with confidence: {names}."
             ),
             evidence=tuple(
                 f"{e.value!r} was extracted but never appears in the final summary"
@@ -127,8 +135,8 @@ def diagnose(trace: Trace) -> Diagnosis | None:
             category=FailureCategory.PROMPT_FAILURE,
             step=failing.step,
             explanation=(
-                f"Step {failing.step!r} raised an error instead of a usable result: "
-                f"{failing.error_message}"
+                f"{failing.step.capitalize()} raised an error instead of a usable "
+                f"result: {failing.error_message}"
             ),
             evidence=(failing.raw_response,) if failing.raw_response else (),
         )
@@ -139,8 +147,8 @@ def diagnose(trace: Trace) -> Diagnosis | None:
         if found:
             return found
 
-    # No mechanical detector fired but the trace was still marked DEGRADED --
-    # only find_propagation_drop() can be responsible for that classification.
+    # No mechanical detector fired but the trace was still marked DEGRADED,
+    # so only find_propagation_drop() can be responsible for that.
     drop = find_propagation_drop(trace.spans)
     if drop:
         prev_confidence = next(
@@ -151,10 +159,9 @@ def diagnose(trace: Trace) -> Diagnosis | None:
             category=FailureCategory.PROPAGATION_ERROR,
             step=drop.step,
             explanation=(
-                f"Step {drop.step!r} received input from a step that scored its own "
-                f"confidence at {prev_confidence}, but {drop.step}'s confidence fell to "
-                f"{drop.confidence}; it did not handle what it was given as well as the "
-                "step before it produced it."
+                f"{drop.step.capitalize()} inherited input from a step confident at "
+                f"{prev_confidence}, but its own confidence dropped to {drop.confidence}: "
+                "it didn't handle that input as cleanly as the step before it did."
             ),
             evidence=(),
         )
