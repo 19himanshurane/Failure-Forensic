@@ -15,6 +15,7 @@ from ..errors import StepError
 from ..llm import LLMClient, LLMRequest, MalformedResponse, extract_json
 from ..models import Document, ExtractionResult
 from ..money import SYMBOL_TO_CODE, AmbiguousAmount, parse_amount
+from ..tracing import traced_step
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,7 @@ def _coerce(payload: dict) -> dict:
     return out
 
 
+@traced_step("extraction")
 def extract(document: Document, client: LLMClient) -> ExtractionResult:
     request = LLMRequest(
         tag="extraction",

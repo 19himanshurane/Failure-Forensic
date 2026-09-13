@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from ..errors import StepError
 from ..llm import LLMClient, LLMRequest, MalformedResponse, extract_json
 from ..models import Classification, Document, DocumentType, ExtractionResult
+from ..tracing import traced_step
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ def _coerce_scores(raw: object) -> dict[str, float]:
     return scores
 
 
+@traced_step("classification")
 def classify(document: Document, extraction: ExtractionResult,
              client: LLMClient) -> Classification:
     request = LLMRequest(

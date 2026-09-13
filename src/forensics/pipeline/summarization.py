@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from ..errors import StepError
 from ..llm import LLMClient, LLMRequest, MalformedResponse, extract_json
 from ..models import Classification, Document, DocumentType, ExtractionResult, Summary
+from ..tracing import traced_step
 
 STEP_VERSION = "summarization/v1"
 
@@ -93,6 +94,7 @@ def build_user_prompt(document: Document, extraction: ExtractionResult,
     )
 
 
+@traced_step("summarization")
 def summarize(document: Document, extraction: ExtractionResult,
               classification: Classification, client: LLMClient) -> Summary:
     request = LLMRequest(

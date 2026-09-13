@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from ..errors import StepError
 from ..models import Document
+from ..tracing import traced_step
 
 # Bumped whenever the behaviour of this step changes. It travels into the trace
 # so you can tell "this failed on intake v1" apart from "this failed on v2".
@@ -20,6 +21,7 @@ STEP_VERSION = "intake/v1"
 MIN_CHARS = 20
 
 
+@traced_step("intake")
 def intake(raw_text: str, source_name: str) -> Document:
     if raw_text is None or not raw_text.strip():
         raise StepError("intake", f"{source_name}: document is empty")
