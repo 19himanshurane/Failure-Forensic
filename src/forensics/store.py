@@ -15,6 +15,7 @@ touch disk relies on that).
 from __future__ import annotations
 
 import sqlite3
+import threading
 from pathlib import Path
 
 from .analysis import diagnose
@@ -38,10 +39,18 @@ class TraceStore:
     def __init__(self, directory: str | Path = "traces") -> None:
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(self.dir / "index.db")
+        # check_same_thread=False: a web server (FastAPI included) runs sync
+        # route handlers in a thread pool, so "the thread that opened this
+        # connection" is not a fact any caller can rely on. The lock below is
+        # what actually keeps that safe -- sqlite3 connections are not
+        # implicitly thread-safe for concurrent use, only single-threaded-at-
+        # a-time use from multiple threads.
+        self._db = sqlite3.connect(self.dir / "index.db", check_same_thread=False)
         self._db.row_factory = sqlite3.Row
-        self._db.execute(_SCHEMA)
-        self._db.commit()
+        self._lock = threading.Lock()
+        with self._lock:
+            self._db.execute(_SCHEMA)
+            self._db.commit()
 
     def save(self, trace: Trace) -> Path:
         path = self.dir / f"{trace.trace_id}.json"
@@ -50,18 +59,19 @@ class TraceStore:
         # can group thousands of traces by category without reloading and
         # re-diagnosing every JSON file on every query.
         diagnosis = diagnose(trace)
-        self._db.execute(
-            "INSERT OR REPLACE INTO traces "
-            "(trace_id, doc_id, source_name, created_at, status, final_score, category, root_step) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                trace.trace_id, trace.doc_id, trace.source_name,
-                trace.created_at.isoformat(), trace.status.value, trace.final_score,
-                diagnosis.category.value if diagnosis else None,
-                diagnosis.step if diagnosis else None,
-            ),
-        )
-        self._db.commit()
+        with self._lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO traces "
+                "(trace_id, doc_id, source_name, created_at, status, final_score, category, root_step) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    trace.trace_id, trace.doc_id, trace.source_name,
+                    trace.created_at.isoformat(), trace.status.value, trace.final_score,
+                    diagnosis.category.value if diagnosis else None,
+                    diagnosis.step if diagnosis else None,
+                ),
+            )
+            self._db.commit()
         return path
 
     def load(self, trace_id: str) -> Trace:
@@ -71,13 +81,15 @@ class TraceStore:
     def history_for(self, doc_id: str) -> list[sqlite3.Row]:
         """Every past trace for this document, oldest first -- "is this the
         same failing case as last time" reads from exactly this."""
-        cur = self._db.execute(
-            "SELECT * FROM traces WHERE doc_id = ? ORDER BY created_at", (doc_id,),
-        )
-        return cur.fetchall()
+        with self._lock:
+            cur = self._db.execute(
+                "SELECT * FROM traces WHERE doc_id = ? ORDER BY created_at", (doc_id,),
+            )
+            return cur.fetchall()
 
     def all_traces(self) -> list[sqlite3.Row]:
-        return self._db.execute("SELECT * FROM traces ORDER BY created_at").fetchall()
+        with self._lock:
+            return self._db.execute("SELECT * FROM traces ORDER BY created_at").fetchall()
 
     def close(self) -> None:
         self._db.close()
