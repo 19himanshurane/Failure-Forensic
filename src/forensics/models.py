@@ -9,10 +9,11 @@ analyser in Phase 3 has nothing to reason about.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+import uuid
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -159,17 +160,26 @@ class Summary(Payload):
     confidence: Confidence
     reasoning: str = ""
 
-    def dropped_facts(self, extraction: ExtractionResult, min_confidence: int = 3) -> tuple[Entity, ...]:
+    def dropped_facts(self, extraction: ExtractionResult, document: Document | None = None,
+                       min_confidence: int = 3) -> tuple[Entity, ...]:
         """Entities step 2 extracted with confidence but this summary never mentions.
 
         Only entities extraction actually returned are considered, which is what
         separates this from step 2 never finding the fact in the first place: a
         hit here means the fact existed and was lost in step 4 -- the "Context
         Loss" failure mode described where extraction is passed into summarize().
+
+        Pass `document` to also exclude entities that were never grounded in the
+        first place: a hallucinated fact was never true, so summarize() leaving
+        it out is not "context loss", it's just not repeating a fabrication --
+        that failure already belongs to extraction, not to this step.
         """
         haystack = normalise(f"{self.headline} {' '.join(self.bullets)}")
+        candidates = extraction.all_entities()
+        if document is not None:
+            candidates = tuple(e for e in candidates if e.is_grounded(document))
         return tuple(
-            e for e in extraction.all_entities()
+            e for e in candidates
             if e.confidence >= min_confidence and normalise(e.value) not in haystack
         )
 
@@ -195,24 +205,39 @@ class Span(Payload):
     """One step's contribution to a trace.
 
     Success and failure are both first-class: `output` is set when the step
-    returned a value, `error_message`/`raw_response` when it raised a
-    StepError instead -- the same evidence the exception carries, so tracing
-    loses nothing when it catches what the caller would otherwise have to.
-    cache_key/model/source/tokens are blank for intake, which never calls a
-    model.
+    returned a value, `error_message` when it raised a StepError instead --
+    the same evidence the exception carries, so tracing loses nothing when it
+    catches what the caller would otherwise have to. `input` and `raw_response`
+    are captured every time a model was actually called, not only on failure,
+    so a healthy span is exactly as inspectable as a broken one. cache_key,
+    model, source, prompt/tokens and confidence are blank for intake, which
+    never calls a model.
     """
 
     step: str
     ok: bool
     latency_ms: float
+    input: dict[str, Any] | None = None
     cache_key: str | None = None
     model: str = ""
     source: str = ""
+    prompt: str | None = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    confidence: int | None = None
     output: Document | ExtractionResult | Classification | Summary | None = None
     error_message: str | None = None
     raw_response: str | None = None
+
+
+class TraceStatus(str, Enum):
+    SUCCESS = "success"
+    # Completed, but a mechanical detector found something worth a human's
+    # attention -- a hallucinated entity, an ambiguous classification, a
+    # dropped fact. Distinct from FAILURE: the pipeline produced a
+    # PipelineResult, it just should not be trusted blindly.
+    DEGRADED = "degraded"
+    FAILURE = "failure"
 
 
 class Trace(Payload):
@@ -223,7 +248,89 @@ class Trace(Payload):
     where the run stopped.
     """
 
+    trace_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source_name: str
+    doc_id: str | None = None
     spans: tuple[Span, ...]
-    ok: bool
+    status: TraceStatus
     result: PipelineResult | None = None
+
+    @property
+    def ok(self) -> bool:
+        """Convenience for callers that only care "did this produce a result",
+        without caring whether a detector flagged it as degraded."""
+        return self.status is not TraceStatus.FAILURE
+
+    @property
+    def final_score(self) -> int | None:
+        """The last step's self-reported confidence, used as the trace's
+        overall quality score for the SQLite index. None for a failed trace,
+        which never reached a final step."""
+        return self.result.summary.confidence if self.result else None
+
+
+# --------------------------------------------------------------------------
+# Phase 3: root-cause diagnosis
+# --------------------------------------------------------------------------
+
+class FailureCategory(str, Enum):
+    EXTRACTION_HALLUCINATION = "extraction_hallucination"
+    MISCLASSIFICATION = "misclassification"
+    PROPAGATION_ERROR = "propagation_error"
+    PROMPT_FAILURE = "prompt_failure"
+    CONTEXT_LOSS = "context_loss"
+
+
+class Diagnosis(Payload):
+    """The output of walking a failed or degraded trace backward.
+
+    `step` is the span identified as the root cause. `evidence` is a list of
+    human-readable facts an engineer can check against the source document
+    without re-running anything -- the point of the evidence chain is that the
+    diagnosis is falsifiable, not asserted.
+    """
+
+    category: FailureCategory
+    step: str
+    explanation: str
+    evidence: tuple[str, ...] = ()
+
+
+# --------------------------------------------------------------------------
+# Phase 5: feedback-to-eval loop
+# --------------------------------------------------------------------------
+
+class EvalCase(Payload):
+    """A confirmed failure, frozen into a regression test.
+
+    Carries the original input rather than just a doc_id so the case can be
+    replayed on its own -- against a mock, a cassette, or a live model --
+    without depending on the trace (or the document) that produced it still
+    existing anywhere.
+    """
+
+    case_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    source_trace_id: str
+    raw_text: str
+    source_name: str
+    doc_id: str | None = None
+    category: FailureCategory
+    failing_step: str
+    explanation: str
+    bad_output: dict[str, Any] | None = None
+    corrected_output: dict[str, Any] | None = None
+
+
+class RegressionOutcome(str, Enum):
+    FIXED = "fixed"                  # the trace is healthy now
+    STILL_FAILING = "still_failing"  # same category, same step
+    CHANGED = "changed"              # still bad, but a different diagnosis
+
+
+class RegressionResult(Payload):
+    case_id: str
+    outcome: RegressionOutcome
+    new_trace_id: str
+    new_category: FailureCategory | None = None
