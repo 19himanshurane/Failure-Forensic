@@ -1,10 +1,87 @@
 # Failure Forensics
 
-Observability and root-cause analysis for multi-step AI pipelines. It runs a document through a 4-step LLM pipeline, traces every step the way a real observability stack would, mechanically diagnoses *why* a run went wrong, and turns confirmed failures into a growing regression test suite.
+<p align="center">
+  <a href="https://github.com/19himanshurane/Failure-Forensic/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/19himanshurane/Failure-Forensic/actions/workflows/tests.yml/badge.svg"></a>
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="python" src="https://img.shields.io/badge/python-3.11%2B-blue">
+  <img alt="tests" src="https://img.shields.io/badge/tests-107%20passing-brightgreen">
+  <img alt="docker" src="https://img.shields.io/badge/docker-ready-blue">
+  <img alt="infra cost" src="https://img.shields.io/badge/infra%20cost-%240%2Fmonth-brightgreen">
+</p>
 
-Automated root-cause diagnosis turns a multi-step pipeline failure from an hours-long manual investigation into a sub-second, evidence-backed answer.
+<p align="center">
+  <a href="https://failure-forensic-ui.onrender.com"><b>Live demo</b></a> &middot;
+  <a href="https://failure-forensic.onrender.com/docs"><b>Live API docs</b></a> &middot;
+  <a href="#setup">Setup</a> &middot;
+  <a href="#try-it-in-2-minutes">Try it in 2 minutes</a> &middot;
+  <a href="#how-it-works">Architecture</a>
+</p>
 
-## Architecture
+**[Try the live trace explorer](https://failure-forensic-ui.onrender.com)**: no setup, no local run. Paste a document, run it through the real pipeline, and watch it get diagnosed.
+
+---
+
+## The problem
+
+A pipeline that chains several LLM calls (extract facts, classify the document, write a summary) fails in ways that are genuinely hard to trace back. An entity invented two steps upstream doesn't announce itself; it just quietly turns into a wrong line in the final summary, and by the time a human notices something's off, the actual mistake is buried under two more layers of processing that all looked fine on their own.
+
+**Failure Forensics** is a pipeline built specifically to make that failure visible. Every step is traced, a backward analyzer walks a bad trace to the exact step that caused it, and confirmed failures get frozen into a regression set so you can tell later whether they're actually fixed.
+
+## What it does
+
+| Stage | What it does |
+|---|---|
+| Intake | canonicalizes raw text into a content-addressed `Document`, so identical input always gets the same id |
+| Extraction | pulls entities with a verbatim source quote attached to each one, so hallucination detection is a substring check, not a judgement call |
+| Classification | scores every category independently and derives the confidence margin in Python, instead of asking the model to output a margin it can't actually calibrate |
+| Summarization | writes a type-tailored summary from the facts extraction already found |
+| Tracing | one `Span` per step (input, prompt, output, confidence, latency), both as custom objects and as real OpenTelemetry spans |
+| Root-cause analyzer | walks a failed or degraded trace backward and stops at the first step whose output doesn't hold up against its own input |
+| Feedback loop | a confirmed diagnosis freezes into a replayable `EvalCase`, so a later run can be checked against it: fixed, still failing the same way, or failing differently |
+| API + frontend | FastAPI backend, React trace explorer, wired together live |
+
+## What it looks like
+
+![Trace explorer showing a context-loss diagnosis](docs/screenshots/trace-explorer.jpg)
+
+Every node in the flow strip is clickable down to the actual input, prompt, and raw model response for that step. The diagnosis panel on the right names the step at fault and lists the specific facts involved, not just a status code.
+
+## Setup
+
+```bash
+git clone https://github.com/19himanshurane/Failure-Forensic.git
+cd Failure-Forensic
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+
+cp .env.example .env
+# Add a free Groq key from console.groq.com to GROQ_API_KEY if you want a
+# real model instead of the mock. The mock needs no key at all.
+```
+
+## Try it in 2 minutes
+
+```bash
+uvicorn forensics.api:app --reload
+# -> http://localhost:8000/docs
+```
+
+In a second terminal:
+
+```bash
+cd frontend && npm install && npm run dev
+# -> http://localhost:5173
+```
+
+Or run both together:
+
+```bash
+docker compose up --build
+# API:      http://localhost:8000
+# Frontend: http://localhost:8080
+```
+
+## How it works
 
 ```mermaid
 flowchart LR
@@ -28,116 +105,88 @@ flowchart LR
     Eval -->|"check_regression"| Pipeline
 ```
 
-A run produces a `Trace` (one `Span` per step: input, prompt, output, raw response, confidence, latency). The backward analyzer walks a failed or degraded trace from its last span toward its first and stops at the first step whose own output doesn't hold up against its own input. That step is the root cause. A human confirming a diagnosis in the UI freezes it into an `EvalCase`, replayable later to check whether it's fixed, still failing the same way, or failing differently.
-
-## Failure taxonomy
+A run produces a `Trace`, made up of one `Span` per step, carrying its input, prompt, output, confidence, and latency. The backward analyzer walks a failed or degraded trace from its last span toward its first and stops at the step whose own output doesn't hold up against its own input. That step is the root cause.
 
 | Category | Where it's caught | Mechanism |
 |---|---|---|
-| Extraction hallucination | Extraction | `source_quote` doesn't appear in the document (a substring check, not a judgement call) |
+| Extraction hallucination | Extraction | `source_quote` doesn't appear in the document |
 | Misclassification | Classification | Top and runner-up category scores are within 20% of each other |
 | Context loss | Summarization | A high-confidence, grounded fact from extraction never appears in the final summary |
 | Prompt failure | Any LLM step | The model's response doesn't parse as the JSON the step asked for |
-| Propagation error | Any LLM step | That step's self-reported confidence drops sharply from the step before it, with no other category already explaining it |
-
-## Tech stack
-
-| Component | Choice |
-|---|---|
-| Language | Python 3.11+ |
-| Pipeline | Custom 4-step chain, Pydantic models at every boundary |
-| LLM provider | Groq (OpenAI-compatible; OpenAI/OpenRouter also wired up) |
-| Tracing | Custom `Span`/`Trace` models + real OpenTelemetry spans |
-| Storage | SQLite index + JSON trace files |
-| API | FastAPI |
-| Frontend | React (Vite) |
-| Containerization | Docker + docker-compose |
-
-## Project layout
-
-```
-src/forensics/
-  pipeline/        intake, extraction, classification, summarization, runner, tracing
-  models.py        every typed value that crosses a step boundary (Document, Trace, Diagnosis, ...)
-  tracing.py       @traced_step decorator + RecordingLLMClient (Phase 2)
-  otel.py          OpenTelemetry span wiring, opt-in via FF_OTEL_EXPORTER
-  analysis.py      diagnose() -- the backward root-cause walk (Phase 3)
-  store.py         TraceStore: JSON files + SQLite index
-  eval.py          flag_case / EvalDataset / check_regression / failure_analytics (Phase 5)
-  api.py           FastAPI app
-  llm/             MockLLM, ReplayClient, live OpenAI-compatible client, provider selection
-frontend/          React trace explorer (talks to the API)
-tests/             one file per module above, plus test_api.py and an opt-in test_live_smoke.py
-```
-
-## Running it
-
-### Backend only (mock mode, no API key needed)
-
-```bash
-python -m venv .venv && .venv/Scripts/activate   # or source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
-```
-
-### API + React frontend, locally
-
-```bash
-uvicorn forensics.api:app --reload            # http://localhost:8000, docs at /docs
-cd frontend && npm install && npm run dev     # http://localhost:5173, proxies /api to 8000
-```
-
-### Everything, containerized
-
-```bash
-docker compose up --build
-# API:      http://localhost:8000
-# Frontend: http://localhost:8080
-```
-
-Trace and eval data live in a named Docker volume (`ff-data`) so they survive container restarts.
-
-### Live mode (a real model instead of the mock)
-
-Copy `.env.example` to `.env`, set `GROQ_API_KEY` (free at [console.groq.com/keys](https://console.groq.com/keys)), and set `FF_LLM_MODE=live`. `scripts/check_provider.py` lists the models your key currently has access to, since model IDs on free tiers get deprecated regularly.
-
-```bash
-python scripts/check_provider.py
-RUN_LIVE_SMOKE=1 pytest tests/test_live_smoke.py -v
-```
-
-## Deploying to Render
-
-Two services, deployed separately from the same repo. There's no blueprint file for this. Render's dashboard flow is quick enough for a two-service setup, and a committed `render.yaml` would risk drifting out of sync with Render's own schema.
-
-**1. Create the API service.** New → Web Service → Docker, and connect this repo.
-Root directory: repo root (`Dockerfile` at `./Dockerfile`). Render assigns the port via `$PORT`; the Dockerfile's `CMD` already binds to it.
-Env vars: `FF_LLM_MODE=mock` (or `live`, plus `GROQ_API_KEY` and `FF_LLM_PROVIDER=groq`, to hit a real model). Leave `FF_API_CORS_ORIGINS` for step 3.
-The free instance type has **no persistent disk**, so trace and eval-case data resets on every restart or redeploy. For the eval set to actually persist, use a paid instance type with a disk mounted at `/data` (matches `FF_TRACE_DIR`/`FF_EVAL_FILE` already set in the Dockerfile).
-
-**2. Create the frontend.** New → Static Site, same repo.
-Root directory: `frontend`. Build command: `npm install && npm run build`. Publish directory: `dist`.
-Env var: `VITE_API_BASE` = the API service's URL from step 1 (e.g. `https://failure-forensics-api.onrender.com`, no trailing slash). `api.js` reads this at build time.
-
-**3. Close the loop.**
-Back on the API service, set `FF_API_CORS_ORIGINS` to the static site's URL from step 2, and redeploy the API, or the browser blocks the frontend's requests to it.
-
-Free-tier web services spin down after 15 minutes idle; the first request after a while is a slow cold start, not a broken deploy.
-
-## OpenTelemetry
-
-Off by default (a no-op tracer, zero cost). Set `FF_OTEL_EXPORTER=console` to print spans locally, or `otlp` (with the `otlp` extra installed: `pip install -e ".[otlp]"`) to ship them to a real collector via `OTEL_EXPORTER_OTLP_ENDPOINT`.
+| Propagation error | Any LLM step | That step's confidence drops sharply from the step before it, with no other category already explaining why |
 
 ## API reference
 
-Full interactive reference at `/docs` once the API is running. Summary:
+Full interactive reference at [`/docs`](https://failure-forensic.onrender.com/docs) once the API is running. Summary:
 
 | Endpoint | Does |
 |---|---|
 | `POST /runs` | Run a document through the pipeline (`raw_text`, `source_name`, optional `mode` and `chaos`) |
-| `GET /runs` | List runs (from the SQLite index) |
+| `GET /runs` | List runs from the SQLite index |
 | `GET /runs/{trace_id}` | Full trace, every span |
 | `GET /runs/{trace_id}/diagnosis` | Root-cause diagnosis, or `null` if the run was clean |
 | `POST /runs/{trace_id}/flag` | Confirm a diagnosis (or override its category) into a permanent eval case |
 | `GET /eval-cases` | The growing regression-test set |
-| `GET /analytics` | Failure counts by category/step, failure rate by day, time-to-diagnosis |
+| `GET /analytics` | Failure counts by category and step, failure rate by day, time-to-diagnosis |
+
+## Configuration
+
+Environment variables (see `.env.example`):
+
+| Variable | Purpose |
+|---|---|
+| `FF_LLM_MODE` | `mock` (default, free, no key), `replay` (cassette playback), or `live` |
+| `FF_LLM_PROVIDER` | `groq`, `openai`, or `openrouter` for live mode |
+| `GROQ_API_KEY` | free key from console.groq.com; powers live mode |
+| `FF_MODEL` | override the default model; `scripts/check_provider.py` lists what your key currently has access to |
+| `FF_MOCK_CHAOS` | comma-separated failure injections for testing the detectors: `hallucinate,misclassify,drop_context,bad_json` |
+| `FF_OTEL_EXPORTER` | unset (no-op, zero cost), `console`, or `otlp` (needs the `otlp` extra) |
+| `FF_TRACE_DIR` / `FF_EVAL_FILE` | where the API persists traces and flagged eval cases |
+| `FF_API_CORS_ORIGINS` | comma-separated origins the API will accept requests from |
+
+## Deploying to Render
+
+Two services, deployed separately from the same repo.
+
+**1. Create the API service.** New → Web Service → Docker, connect this repo. Render assigns the port via `$PORT`; the Dockerfile already binds to it. Set `FF_LLM_MODE` (and `GROQ_API_KEY`/`FF_LLM_PROVIDER` for a real model). The free instance type has no persistent disk, so trace and eval-case data resets on every restart; a paid instance with a disk mounted at `/data` fixes that.
+
+**2. Create the frontend.** New → Static Site, same repo. Root directory `frontend`, build command `npm install && npm run build`, publish directory `dist`. Set `VITE_API_BASE` to the API service's URL from step 1.
+
+**3. Close the loop.** Back on the API service, set `FF_API_CORS_ORIGINS` to the static site's URL and redeploy, or the browser blocks the frontend's requests to it.
+
+## Development
+
+```bash
+pytest tests/ -v
+```
+
+```
+src/forensics/
+  pipeline/        intake, extraction, classification, summarization, runner, tracing
+  models.py        every typed value that crosses a step boundary
+  tracing.py       @traced_step decorator + RecordingLLMClient
+  otel.py          OpenTelemetry span wiring
+  analysis.py      diagnose(): the backward root-cause walk
+  store.py         TraceStore: JSON files + SQLite index
+  eval.py          flag_case / EvalDataset / check_regression / failure_analytics
+  api.py           FastAPI app
+  llm/             MockLLM, ReplayClient, live OpenAI-compatible client
+frontend/          React trace explorer
+tests/             one file per module above, plus test_api.py and an opt-in test_live_smoke.py
+```
+
+## Known limitations
+
+- The mock LLM is deliberately crude (rule-based, keeps whatever's in the first few lines of a document for its summary), and that produces real context loss even with no chaos flag set. It's honest, not a bug, and a plain invoice-shaped document can legitimately come back `DEGRADED` under the mock alone.
+- Propagation-error detection is a heuristic, a confidence-drop threshold between consecutive steps. It catches the shape of that failure, not a semantic explanation of why the step struggled.
+- Groq's free-tier model catalog changes without much warning; a model ID that works today can 404 next month. `scripts/check_provider.py` exists specifically to catch that before a real run does.
+- The live deploy runs on Render's free tier. The API spins down after about 15 minutes idle (the first request after that takes up to a minute), and there's no persistent disk, so trace and eval data reset on every restart.
+- OpenTelemetry export has only been exercised with the no-op and console exporters; the `otlp` path isn't validated against a real collector in this deploy.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+---
+
+<p align="center">Built so a multi-step pipeline's failures don't stay a mystery: point the backward analyzer at a bad trace and get the actual root cause, with the evidence attached.</p>
