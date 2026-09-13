@@ -106,6 +106,24 @@ python scripts/check_provider.py
 RUN_LIVE_SMOKE=1 pytest tests/test_live_smoke.py -v
 ```
 
+## Deploying to Render
+
+Two services, deployed separately from the same repo -- there's no blueprint file for this, since Render's dashboard flow is quick enough for a two-service setup and doesn't risk drifting out of sync with Render's own schema the way a committed `render.yaml` would.
+
+**1. API -- New → Web Service → Docker, connect this repo.**
+Root directory: repo root (`Dockerfile` at `./Dockerfile`). Render assigns the port via `$PORT`; the Dockerfile's `CMD` already binds to it.
+Env vars: `FF_LLM_MODE=mock` (or `live`, plus `GROQ_API_KEY` and `FF_LLM_PROVIDER=groq`, to hit a real model). Leave `FF_API_CORS_ORIGINS` for step 3.
+The free instance type has **no persistent disk** -- trace and eval-case data resets on every restart or redeploy. For the eval set to actually persist, use a paid instance type with a disk mounted at `/data` (matches `FF_TRACE_DIR`/`FF_EVAL_FILE` already set in the Dockerfile).
+
+**2. Frontend -- New → Static Site, same repo.**
+Root directory: `frontend`. Build command: `npm install && npm run build`. Publish directory: `dist`.
+Env var: `VITE_API_BASE` = the API service's URL from step 1 (e.g. `https://failure-forensics-api.onrender.com`, no trailing slash) -- `api.js` reads this at build time.
+
+**3. Close the loop.**
+Back on the API service, set `FF_API_CORS_ORIGINS` to the static site's URL from step 2, and redeploy the API -- otherwise the browser blocks the frontend's requests to it.
+
+Free-tier web services spin down after 15 minutes idle; the first request after a while is a slow cold start, not a broken deploy.
+
 ## OpenTelemetry
 
 Off by default (a no-op tracer, zero cost). Set `FF_OTEL_EXPORTER=console` to print spans locally, or `otlp` (with the `otlp` extra installed: `pip install -e ".[otlp]"`) to ship them to a real collector via `OTEL_EXPORTER_OTLP_ENDPOINT`.
