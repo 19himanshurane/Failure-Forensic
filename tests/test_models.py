@@ -89,7 +89,7 @@ def test_dropped_fact_is_detected_mechanically():
 
 def test_low_confidence_facts_are_not_flagged_as_dropped():
     """A shaky extraction that never made it into the summary is not the same
-    failure as a solid one that did -- only the latter is worth surfacing."""
+    failure as a solid one that did; only the latter is worth surfacing."""
     shaky = Entity(value="Globex Ltd", source_quote="Globex Ltd", confidence=2)
     extraction = ExtractionResult(organizations=(shaky,), confidence=2)
     summary = Summary(

@@ -65,7 +65,7 @@ def test_eval_dataset_round_trips_through_jsonl(tmp_path):
 def test_regression_is_fixed_once_the_chaos_is_gone():
     """The eval case is built from a chaotic run; replaying the identical
     input through a clean client is the whole reason a case stores raw_text
-    instead of just a doc_id -- it must be independently replayable."""
+    instead of just a doc_id: it must be independently replayable."""
     trace = run_traced_pipeline(CLEAN_DOC, "i.txt", client=MockLLM(chaos={"hallucinate"}))
     case = flag_case(trace, CLEAN_DOC)
 

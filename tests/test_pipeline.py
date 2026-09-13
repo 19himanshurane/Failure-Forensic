@@ -93,8 +93,8 @@ def test_chaos_hallucination_is_caught_end_to_end():
 
 def test_chaos_drop_context_loses_facts_a_clean_summary_keeps():
     """Regression: truncating the summary should be distinguishable from step 2
-    never having found the fact -- the same INVOICE extracts the same entities
-    either way, only step 4's output differs."""
+    never having found the fact. The same INVOICE extracts the same entities
+    either way; only step 4's output differs."""
     clean = run_pipeline(INVOICE, "i.txt", client=MockLLM())
     chaos = run_pipeline(INVOICE, "i.txt", client=MockLLM(chaos={"drop_context"}))
 

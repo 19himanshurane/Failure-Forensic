@@ -40,7 +40,7 @@ class OpenAICompatClient:
         }
         # JSON mode constrains the model to emit syntactically valid JSON. Not
         # every model on every provider supports it, so we degrade rather than
-        # crash -- extract_json() in base.py is the safety net either way.
+        # crash; extract_json() in base.py is the safety net either way.
         if request.json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 

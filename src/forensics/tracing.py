@@ -2,11 +2,11 @@
 
 Two independent mechanisms, deliberately layered:
 
-  RecordingLLMClient  -- wraps whatever LLMClient a step is given, and keeps
+  RecordingLLMClient  -> wraps whatever LLMClient a step is given, and keeps
                          every request/response pair that passes through it.
                          This is where prompt, raw response, model, tokens and
                          cache_key come from.
-  traced_step         -- a decorator applied directly to a step function
+  traced_step         -> a decorator applied directly to a step function
                          (intake, extract, classify, summarize). One line at
                          the definition turns it into an instrumented step,
                          exactly as Phase 2 asked for. With no trace active it
@@ -15,12 +15,12 @@ Two independent mechanisms, deliberately layered:
 
 The two meet through a contextvar: run_traced_pipeline() opens a trace context
 around an ordinary call to the four step functions, and each decorated step
-notices the open context, times itself, and appends its own Span -- the step
+notices the open context, times itself, and appends its own Span. The step
 functions themselves stay exactly as ignorant of tracing as runner.py's
 docstring insists they must be.
 
 Each step also opens a real OpenTelemetry span (see otel.py) alongside its own
-Span object -- "OpenTelemetry + custom spans", not one instead of the other.
+Span object: "OpenTelemetry + custom spans", not one instead of the other.
 """
 
 from __future__ import annotations
@@ -48,8 +48,8 @@ class RecordingLLMClient:
 
     A span needs the request's cache_key and prompt text, and the response's
     model/source/tokens/raw text. The only way to get those without changing
-    the step functions -- which take a client, not a request/response pair --
-    is to watch the calls from outside.
+    the step functions, which take a client rather than a request/response
+    pair, is to watch the calls from outside.
     """
 
     def __init__(self, inner: LLMClient) -> None:
@@ -87,8 +87,8 @@ def _serialize_input(fn: Callable, args: tuple, kwargs: dict) -> dict[str, Any] 
     """Best-effort JSON-safe snapshot of a step's arguments.
 
     Only Pydantic payloads and plain scalars are kept. An LLMClient argument
-    (mock, replay, or live) is neither, and is silently dropped -- it is not
-    part of "what this step received" in any sense worth persisting.
+    (mock, replay, or live) is neither, and is silently dropped; it plays no
+    part in "what this step received" worth persisting.
     """
     try:
         bound = inspect.signature(fn).bind(*args, **kwargs)

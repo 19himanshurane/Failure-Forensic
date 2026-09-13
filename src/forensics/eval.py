@@ -34,8 +34,8 @@ def flag_case(trace: Trace, raw_text: str, corrected_output: dict[str, Any] | No
               category: FailureCategory | None = None) -> EvalCase:
     """Turn a diagnosed trace into a permanent eval case.
 
-    `raw_text` is the exact input that produced `trace` -- Trace itself does
-    not keep it (only the resulting Document, which is normalised text, not
+    `raw_text` is the exact input that produced `trace`. Trace itself doesn't
+    keep it (only the resulting Document, which is normalised text, not
     necessarily byte-identical to what intake was given), so the caller, who
     still has it, must supply it. `category` lets a human override the
     automatic diagnosis; omit it to accept diagnose()'s finding as-is.
@@ -95,7 +95,7 @@ def check_regression(case: EvalCase, client: LLMClient | None = None) -> Regress
     The client is whatever the caller wants "current" to mean: the mock for a
     fast dev-loop check, a ReplayClient for a byte-exact re-check of a
     specific known model response, or a live client for a real regression
-    sweep. None of those are this function's business -- it only compares
+    sweep. None of those are this function's business; it only compares
     yesterday's diagnosis to today's.
     """
     new_trace = run_traced_pipeline(case.raw_text, case.source_name, client=client)

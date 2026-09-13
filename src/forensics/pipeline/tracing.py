@@ -1,7 +1,7 @@
 """Orchestrates a traced run of the four steps.
 
 The steps themselves (intake, extract, classify, summarize) are already
-instrumented -- each carries its own @traced_step decorator from
+instrumented: each carries its own @traced_step decorator from
 forensics.tracing. This module's only job is to open a trace context around
 an ordinary call to those steps, in the same order and with the same
 arguments as run_pipeline, and turn what came out of the context into a Trace.
@@ -38,7 +38,7 @@ def run_traced_pipeline(raw_text: str, source_name: str,
                         client: LLMClient | None = None) -> Trace:
     """Run all four steps, producing a Trace instead of raising.
 
-    Same steps, same order, same client contract as run_pipeline -- a failing
+    Same steps, same order, same client contract as run_pipeline. A failing
     step ends the trace instead of the process, with every span up to and
     including the failure preserved.
     """

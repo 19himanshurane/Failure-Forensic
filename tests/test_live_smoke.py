@@ -1,7 +1,7 @@
 """A real call to the live provider, exercising the full pipeline end to end.
 
 Skipped by default: it needs network access and a real key, and it costs
-whatever the provider charges. Not part of the ordinary test run -- put your
+whatever the provider charges. Not part of the ordinary test run; put your
 key in .env and run it explicitly:
 
     pytest tests/test_live_smoke.py -v
@@ -45,7 +45,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_live_pipeline_produces_a_well_formed_result():
-    """Not a check on a real model's wording, which is not deterministic -- this
+    """Not a check on a real model's wording, which is not deterministic. This
     only proves the contract holds: a live response actually parses into the
     same typed models every other test relies on, all the way through the
     four steps, instead of the mock's rule-based stand-in."""

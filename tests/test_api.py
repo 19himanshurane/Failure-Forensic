@@ -1,4 +1,4 @@
-"""The REST API is a thin wrapper -- these tests check the wrapping (status
+"""The REST API is a thin wrapper. These tests check the wrapping (status
 codes, request/response shapes, wiring to the store/eval dataset), not the
 pipeline logic itself, which is already covered elsewhere."""
 

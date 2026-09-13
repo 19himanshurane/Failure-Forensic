@@ -32,7 +32,7 @@ class RunRequest(BaseModel):
     source_name: str
     mode: str | None = None  # mock | replay | live; None uses FF_LLM_MODE
     # Comma-separated chaos flags for mock mode only (hallucinate,
-    # misclassify, drop_context, bad_json) -- lets a UI demonstrate each
+    # misclassify, drop_context, bad_json), so a UI can demonstrate each
     # detector on demand instead of only via the FF_MOCK_CHAOS env var.
     chaos: str | None = None
 
@@ -76,8 +76,8 @@ def create_app(trace_dir: str | None = None, eval_path: str | None = None) -> Fa
     @app.post("/runs", response_model=Trace)
     def create_run(req: RunRequest) -> Trace:
         if (req.mode or "mock") == "mock" and req.chaos is not None:
-            # Explicit per-request chaos overrides FF_MOCK_CHAOS entirely --
-            # including to force *no* chaos via an empty string -- so a UI
+            # Explicit per-request chaos overrides FF_MOCK_CHAOS entirely,
+            # including to force *no* chaos via an empty string, so a UI
             # toggle behaves predictably regardless of server-side env config.
             chaos = {c.strip() for c in req.chaos.split(",") if c.strip()}
             client = MockLLM(chaos=chaos)

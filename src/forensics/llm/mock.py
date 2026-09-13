@@ -4,12 +4,12 @@ Two jobs, and it is important to keep them apart:
 
 1. Default mode does crude rule-based work (regex, keywords) so the pipeline is
    runnable and testable with no API key, no cost and no flakiness. Its answers
-   are mediocre but *honest* -- every entity it returns is genuinely quoted from
+   are mediocre but *honest*: every entity it returns is genuinely quoted from
    the source, so it never fabricates evidence.
 
-2. Chaos mode deliberately injects specific, named failure modes. That exists to
-   test the Phase 3 detectors -- you cannot verify a hallucination detector
-   without a known hallucination. It is a test fixture, NOT a source of results:
+2. Chaos mode deliberately injects specific, named failure modes, to test the
+   Phase 3 detectors. You cannot verify a hallucination detector without a
+   known hallucination. It is a test fixture, NOT a source of results:
    the Phase 6 demo numbers must come from real model failures in live mode.
 """
 
@@ -42,8 +42,8 @@ def _document_body(user_prompt: str) -> str:
     Every step wraps the document in --- fences. A real model reads the document
     out of the prompt and quotes from it; the mock has to do the same, or it
     quotes instruction text and fence markers that are not in the source. Those
-    quotes then fail the grounding check and look like hallucinations -- a false
-    positive, which in a debugging tool is worse than no detector at all.
+    quotes then fail the grounding check and look like hallucinations, a false
+    positive that in a debugging tool is worse than no detector at all.
     """
     parts = user_prompt.split("---")
     if len(parts) >= 3:

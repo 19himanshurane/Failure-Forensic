@@ -2,8 +2,8 @@
 
 This is the "cassette" pattern from HTTP testing. It buys two things:
 
-  cost   -- you pay for a response once, then reuse it indefinitely.
-  truth  -- Phase 5 asks "is this known failure still failing?". With a live
+  cost   -> you pay for a response once, then reuse it indefinitely.
+  truth  -> Phase 5 asks "is this known failure still failing?". With a live
             model, a passing re-run might just be a different sample. Replay
             makes the model side of the pipeline constant, so a change in
             behaviour can only have come from a change in *your* code.

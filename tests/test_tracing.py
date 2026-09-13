@@ -85,7 +85,7 @@ def test_every_trace_gets_a_unique_id_and_the_document_id():
 
 def test_status_is_success_when_nothing_was_flagged():
     # Short enough that the mock's crude "first few lines" summary genuinely
-    # covers every fact it extracted -- INVOICE is a bad fixture for this
+    # covers every fact it extracted. INVOICE is a bad fixture for this,
     # because the mock's own summarizer drops "Priya Sharma" and the due date
     # by only keeping the first four lines, which is real (if unrelated)
     # context loss, not a false positive from this test.
@@ -103,13 +103,13 @@ def test_status_is_failure_when_a_step_raises():
     trace = run_traced_pipeline(INVOICE, "i.txt", client=MockLLM(chaos={"bad_json"}))
     assert trace.status is TraceStatus.FAILURE
     assert not trace.ok
-    # intake succeeded before extraction failed, so the doc_id is still known
-    # -- a failure further downstream should not erase what earlier steps learned.
+    # intake succeeded before extraction failed, so the doc_id is still known:
+    # a failure further downstream should not erase what earlier steps learned.
     assert trace.doc_id
 
 
 def test_status_is_degraded_when_a_detector_fires_but_the_run_completes():
-    """A hallucinated entity doesn't stop the pipeline -- it produces a result
+    """A hallucinated entity doesn't stop the pipeline; it produces a result
     that should not be trusted blindly, which is exactly what DEGRADED means."""
     trace = run_traced_pipeline(INVOICE, "i.txt", client=MockLLM(chaos={"hallucinate"}))
     assert trace.status is TraceStatus.DEGRADED

@@ -2,7 +2,7 @@
 
 Observability and root-cause analysis for multi-step AI pipelines. It runs a document through a 4-step LLM pipeline, traces every step the way a real observability stack would, mechanically diagnoses *why* a run went wrong, and turns confirmed failures into a growing regression test suite.
 
-The pitch: automated root-cause diagnosis turns a multi-step pipeline failure from an hours-long manual investigation into a sub-second, evidence-backed answer.
+Automated root-cause diagnosis turns a multi-step pipeline failure from an hours-long manual investigation into a sub-second, evidence-backed answer.
 
 ## Architecture
 
@@ -28,13 +28,13 @@ flowchart LR
     Eval -->|"check_regression"| Pipeline
 ```
 
-A run produces a `Trace` (one `Span` per step: input, prompt, output, raw response, confidence, latency). The backward analyzer walks a failed or degraded trace from its last span toward its first and stops at the first step whose own output doesn't hold up against its own input -- that's the root cause. A human confirming a diagnosis in the UI freezes it into an `EvalCase`, replayable later to check whether it's fixed, still failing the same way, or failing differently.
+A run produces a `Trace` (one `Span` per step: input, prompt, output, raw response, confidence, latency). The backward analyzer walks a failed or degraded trace from its last span toward its first and stops at the first step whose own output doesn't hold up against its own input. That step is the root cause. A human confirming a diagnosis in the UI freezes it into an `EvalCase`, replayable later to check whether it's fixed, still failing the same way, or failing differently.
 
 ## Failure taxonomy
 
 | Category | Where it's caught | Mechanism |
 |---|---|---|
-| Extraction hallucination | Extraction | `source_quote` doesn't appear in the document -- a substring check, not a judgement call |
+| Extraction hallucination | Extraction | `source_quote` doesn't appear in the document (a substring check, not a judgement call) |
 | Misclassification | Classification | Top and runner-up category scores are within 20% of each other |
 | Context loss | Summarization | A high-confidence, grounded fact from extraction never appears in the final summary |
 | Prompt failure | Any LLM step | The model's response doesn't parse as the JSON the step asked for |
@@ -99,7 +99,7 @@ Trace and eval data live in a named Docker volume (`ff-data`) so they survive co
 
 ### Live mode (a real model instead of the mock)
 
-Copy `.env.example` to `.env`, set `GROQ_API_KEY` (free at [console.groq.com/keys](https://console.groq.com/keys)), and set `FF_LLM_MODE=live`. `scripts/check_provider.py` lists the models your key currently has access to -- model IDs on free tiers get deprecated regularly.
+Copy `.env.example` to `.env`, set `GROQ_API_KEY` (free at [console.groq.com/keys](https://console.groq.com/keys)), and set `FF_LLM_MODE=live`. `scripts/check_provider.py` lists the models your key currently has access to, since model IDs on free tiers get deprecated regularly.
 
 ```bash
 python scripts/check_provider.py
@@ -108,19 +108,19 @@ RUN_LIVE_SMOKE=1 pytest tests/test_live_smoke.py -v
 
 ## Deploying to Render
 
-Two services, deployed separately from the same repo -- there's no blueprint file for this, since Render's dashboard flow is quick enough for a two-service setup and doesn't risk drifting out of sync with Render's own schema the way a committed `render.yaml` would.
+Two services, deployed separately from the same repo. There's no blueprint file for this. Render's dashboard flow is quick enough for a two-service setup, and a committed `render.yaml` would risk drifting out of sync with Render's own schema.
 
-**1. API -- New → Web Service → Docker, connect this repo.**
+**1. Create the API service.** New → Web Service → Docker, and connect this repo.
 Root directory: repo root (`Dockerfile` at `./Dockerfile`). Render assigns the port via `$PORT`; the Dockerfile's `CMD` already binds to it.
 Env vars: `FF_LLM_MODE=mock` (or `live`, plus `GROQ_API_KEY` and `FF_LLM_PROVIDER=groq`, to hit a real model). Leave `FF_API_CORS_ORIGINS` for step 3.
-The free instance type has **no persistent disk** -- trace and eval-case data resets on every restart or redeploy. For the eval set to actually persist, use a paid instance type with a disk mounted at `/data` (matches `FF_TRACE_DIR`/`FF_EVAL_FILE` already set in the Dockerfile).
+The free instance type has **no persistent disk**, so trace and eval-case data resets on every restart or redeploy. For the eval set to actually persist, use a paid instance type with a disk mounted at `/data` (matches `FF_TRACE_DIR`/`FF_EVAL_FILE` already set in the Dockerfile).
 
-**2. Frontend -- New → Static Site, same repo.**
+**2. Create the frontend.** New → Static Site, same repo.
 Root directory: `frontend`. Build command: `npm install && npm run build`. Publish directory: `dist`.
-Env var: `VITE_API_BASE` = the API service's URL from step 1 (e.g. `https://failure-forensics-api.onrender.com`, no trailing slash) -- `api.js` reads this at build time.
+Env var: `VITE_API_BASE` = the API service's URL from step 1 (e.g. `https://failure-forensics-api.onrender.com`, no trailing slash). `api.js` reads this at build time.
 
 **3. Close the loop.**
-Back on the API service, set `FF_API_CORS_ORIGINS` to the static site's URL from step 2, and redeploy the API -- otherwise the browser blocks the frontend's requests to it.
+Back on the API service, set `FF_API_CORS_ORIGINS` to the static site's URL from step 2, and redeploy the API, or the browser blocks the frontend's requests to it.
 
 Free-tier web services spin down after 15 minutes idle; the first request after a while is a slow cold start, not a broken deploy.
 

@@ -166,7 +166,7 @@ class Summary(Payload):
 
         Only entities extraction actually returned are considered, which is what
         separates this from step 2 never finding the fact in the first place: a
-        hit here means the fact existed and was lost in step 4 -- the "Context
+        hit here means the fact existed and was lost in step 4, the "Context
         Loss" failure mode described where extraction is passed into summarize().
 
         Pass `document` to also exclude entities that were never grounded in the
@@ -233,7 +233,7 @@ class Span(Payload):
 class TraceStatus(str, Enum):
     SUCCESS = "success"
     # Completed, but a mechanical detector found something worth a human's
-    # attention -- a hallucinated entity, an ambiguous classification, a
+    # attention: a hallucinated entity, an ambiguous classification, a
     # dropped fact. Distinct from FAILURE: the pipeline produced a
     # PipelineResult, it just should not be trusted blindly.
     DEGRADED = "degraded"
@@ -287,7 +287,7 @@ class Diagnosis(Payload):
 
     `step` is the span identified as the root cause. `evidence` is a list of
     human-readable facts an engineer can check against the source document
-    without re-running anything -- the point of the evidence chain is that the
+    without re-running anything. The point of the evidence chain is that the
     diagnosis is falsifiable, not asserted.
     """
 
@@ -305,7 +305,7 @@ class EvalCase(Payload):
     """A confirmed failure, frozen into a regression test.
 
     Carries the original input rather than just a doc_id so the case can be
-    replayed on its own -- against a mock, a cassette, or a live model --
+    replayed on its own, against a mock, a cassette, or a live model,
     without depending on the trace (or the document) that produced it still
     existing anywhere.
     """

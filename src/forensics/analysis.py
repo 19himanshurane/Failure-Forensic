@@ -2,26 +2,26 @@
 
 The spec's algorithm: walk a failed or degraded trace backward from its last
 span toward its first, and at each step ask "is this step's output a
-reasonable transformation of its input?". The first step (in that backward
-scan -- i.e. the *latest* one chronologically) that fails that question is the
+reasonable transformation of its input?". The first step in that backward
+scan (the *latest* one chronologically) that fails that question is the
 root cause.
 
 That question turns out to already have a mechanical answer for four of the
 five named failure categories, because each existing detector checks exactly
 one step's output against exactly that step's own input:
 
-  EXTRACTION_HALLUCINATION  extraction.ungrounded(document)   -- output vs the
+  EXTRACTION_HALLUCINATION  extraction.ungrounded(document)   -> output vs the
                             document extraction itself was given.
-  MISCLASSIFICATION         classification.is_ambiguous       -- intrinsic to
+  MISCLASSIFICATION         classification.is_ambiguous       -> intrinsic to
                             the classification step's own scores.
-  CONTEXT_LOSS              summary.dropped_facts(extraction) -- output vs the
+  CONTEXT_LOSS              summary.dropped_facts(extraction) -> output vs the
                             extraction summarization was given.
-  PROMPT_FAILURE            a StepError already raised          -- the step
+  PROMPT_FAILURE            a StepError already raised          -> the step
                             could not even produce a well-formed output.
 
 PROPAGATION_ERROR is the one case with no existing single-field check, because
 by definition it is a *relationship* between two steps: step N's own output
-looked fine, but step N+1 -- given exactly that output -- did noticeably
+looked fine, but step N+1, given exactly that output, did noticeably
 worse. Confidence is the one signal every step reports about itself, so a
 sharp drop in a step's self-reported confidence relative to the step before
 it, with no other category already explaining that step, is treated as
@@ -89,7 +89,7 @@ def _step_problem(step: str, trace: Trace) -> Diagnosis | None:
             step="classification",
             explanation=(
                 f"Step 3 (Classification) chose {c.doc_type.value} over {runner_up} "
-                f"by a margin of only {c.margin:.2f} -- too close to call reliably."
+                f"by a margin of only {c.margin:.2f}, too close to call reliably."
             ),
             evidence=(c.reasoning,) if c.reasoning else (),
         )
@@ -153,7 +153,7 @@ def diagnose(trace: Trace) -> Diagnosis | None:
             explanation=(
                 f"Step {drop.step!r} received input from a step that scored its own "
                 f"confidence at {prev_confidence}, but {drop.step}'s confidence fell to "
-                f"{drop.confidence} -- it did not handle what it was given as well as the "
+                f"{drop.confidence}; it did not handle what it was given as well as the "
                 "step before it produced it."
             ),
             evidence=(),

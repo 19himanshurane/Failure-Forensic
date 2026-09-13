@@ -28,7 +28,7 @@ def intake(raw_text: str, source_name: str) -> Document:
 
     # Canonicalise before anything else sees the text. Grounding checks compare
     # model quotes against Document.raw_text, so the text stored here must be
-    # exactly the text the model was shown -- normalising later would break that.
+    # exactly the text the model was shown; normalising later would break that.
     text = raw_text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n").strip()
 
     if len(text) < MIN_CHARS:

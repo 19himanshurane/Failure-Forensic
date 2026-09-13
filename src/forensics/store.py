@@ -3,9 +3,9 @@
 Every trace is written twice, for two different readers: a JSON file under
 <dir>/<trace_id>.json for a human (or the eventual trace explorer) to open and
 read end to end, and a row in a SQLite index for anything that needs to query
-across many traces without loading every file -- the failure analytics and
-regression tracking in Phase 5, or "has this doc_id run before" for a
-repeat-case check.
+across many traces without loading every file. That covers the failure
+analytics and regression tracking in Phase 5, and "has this doc_id run
+before" for a repeat-case check.
 
 Deliberately not wired into run_traced_pipeline itself: saving is a decision
 the caller makes (and every test that builds a Trace without wanting it to
@@ -42,7 +42,7 @@ class TraceStore:
         # check_same_thread=False: a web server (FastAPI included) runs sync
         # route handlers in a thread pool, so "the thread that opened this
         # connection" is not a fact any caller can rely on. The lock below is
-        # what actually keeps that safe -- sqlite3 connections are not
+        # what actually keeps that safe, since sqlite3 connections aren't
         # implicitly thread-safe for concurrent use, only single-threaded-at-
         # a-time use from multiple threads.
         self._db = sqlite3.connect(self.dir / "index.db", check_same_thread=False)
@@ -55,9 +55,9 @@ class TraceStore:
     def save(self, trace: Trace) -> Path:
         path = self.dir / f"{trace.trace_id}.json"
         path.write_text(trace.model_dump_json(indent=2), encoding="utf-8")
-        # Diagnosed once, here, and cached in the index -- so failure_analytics()
-        # can group thousands of traces by category without reloading and
-        # re-diagnosing every JSON file on every query.
+        # Diagnosed once, here, and cached in the index. That's what lets
+        # failure_analytics() group thousands of traces by category without
+        # reloading and re-diagnosing every JSON file on every query.
         diagnosis = diagnose(trace)
         with self._lock:
             self._db.execute(
@@ -79,7 +79,7 @@ class TraceStore:
         return Trace.model_validate_json(path.read_text(encoding="utf-8"))
 
     def history_for(self, doc_id: str) -> list[sqlite3.Row]:
-        """Every past trace for this document, oldest first -- "is this the
+        """Every past trace for this document, oldest first. "Is this the
         same failing case as last time" reads from exactly this."""
         with self._lock:
             cur = self._db.execute(

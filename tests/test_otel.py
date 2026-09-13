@@ -1,7 +1,7 @@
 """OpenTelemetry spans should mirror what actually happened during a traced
 run: one span per step nested under a parent pipeline span, attributed with
 the same facts the custom Span model carries, and marked as an error exactly
-when the step raised -- verified independently of forensics' own models."""
+when the step raised, verified independently of forensics' own models."""
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -78,5 +78,5 @@ def test_a_failing_step_marks_its_otel_span_as_an_error():
     assert extraction_span.status.status_code.name == "ERROR"
     assert extraction_span.events  # record_exception() added an event
 
-    # The step never reached, never gets a span at all -- it did not run.
+    # A step that's never reached gets no span at all: it never ran.
     assert "forensics.step.classification" not in spans

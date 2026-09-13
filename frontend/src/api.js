@@ -1,8 +1,8 @@
 // Local dev and the nginx-fronted Docker setup both route same-origin /api
 // requests to the backend (see vite.config.js's proxy and frontend/nginx.conf),
 // so no env var is needed there. A static host (Render, Netlify, ...) serves
-// only the built files with nothing to proxy through, so VITE_API_BASE -- set
-// at build time -- points straight at the deployed API's own URL instead.
+// only the built files with nothing to proxy through, so VITE_API_BASE, set
+// at build time, points straight at the deployed API's own URL instead.
 const BASE = import.meta.env.VITE_API_BASE || "/api";
 
 async function request(path, options) {

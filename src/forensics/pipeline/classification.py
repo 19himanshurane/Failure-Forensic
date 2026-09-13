@@ -2,7 +2,7 @@
 
 Design note worth reading. The obvious prompt asks the model for a document type
 and a confidence margin. Models are poor at producing calibrated derived numbers
-on demand -- ask for a "margin between 0 and 1" and you get a plausible-looking
+on demand: ask for a "margin between 0 and 1" and you get a plausible-looking
 number with no arithmetic behind it.
 
 So we ask for the primitives instead: a 0-100 score per category. The ranking
@@ -47,7 +47,7 @@ Return a single JSON object with exactly these keys:
 
 Score each category independently on how well the document fits it. The scores
 do not need to add up to 100. If a document genuinely sits between two types,
-give both high scores -- do not artificially separate them. That ambiguity is
+give both high scores instead of artificially separating them. That ambiguity is
 useful information, not a mistake.
 
 Return only the JSON object."""

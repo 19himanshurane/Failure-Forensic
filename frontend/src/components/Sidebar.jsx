@@ -24,7 +24,7 @@ export function Sidebar({ runs, selectedId, onSelect, onCreateRun, creating, eva
       <div className="rail-head">
         <span className="eyebrow">Failure Forensics</span>
         <h1>Trace Explorer</h1>
-        <p className="sub">Live against the FastAPI backend -- run any document through the real pipeline.</p>
+        <p className="sub">Live against the FastAPI backend: run any document through the real pipeline.</p>
       </div>
 
       <form className="new-run" onSubmit={submit}>
@@ -62,7 +62,7 @@ export function Sidebar({ runs, selectedId, onSelect, onCreateRun, creating, eva
       </form>
 
       <div className="case-list">
-        {runs.length === 0 && <p className="empty-note">No runs yet -- submit a document above.</p>}
+        {runs.length === 0 && <p className="empty-note">No runs yet. Submit a document above.</p>}
         {runs.map((r) => {
           const meta = STATUS_META[r.status] ?? { label: r.status, cls: "neutral" };
           return (

@@ -14,7 +14,7 @@ from forensics.money import AmbiguousAmount, find_amounts, parse_amount
     ("£1,250.75", Decimal("1250.75"), "GBP"),
     ("300 EUR", Decimal("300"), "EUR"),         # number then code
     ("1,000 GBP", Decimal("1000"), "GBP"),
-    ("EUR 300", Decimal("300"), "EUR"),         # code then number -- the gap we fixed
+    ("EUR 300", Decimal("300"), "EUR"),         # code then number: the gap we fixed
     ("USD 4500", Decimal("4500"), "USD"),
     ("INR 90,000", Decimal("90000"), "INR"),
     ("USD1000", Decimal("1000"), "USD"),

@@ -8,7 +8,7 @@ up in Jaeger/Honeycomb/whatever an org already runs, without either
 representation depending on the other.
 
 Configuration is opt-in and safe by default. With FF_OTEL_EXPORTER unset,
-OpenTelemetry's own API hands back a no-op tracer -- every call below compiles
+OpenTelemetry's own API hands back a no-op tracer, so every call below compiles
 away to nothing, at effectively zero cost. Set it to "console" to print spans
 to stdout locally, or "otlp" to ship them to a real collector (address from
 the standard OTEL_EXPORTER_OTLP_ENDPOINT env var).

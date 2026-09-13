@@ -94,7 +94,7 @@ def _healthy_result() -> tuple[Document, ExtractionResult, Classification, Summa
 
 
 def test_propagation_error_is_diagnosed_from_a_sharp_confidence_drop():
-    """No mock chaos flag produces this on its own -- it's a relationship
+    """No mock chaos flag produces this on its own: it's a relationship
     between two steps' confidence, not a single bad field, so it's exercised
     directly against a hand-built trace, the same way test_models.py checks
     the mechanical detectors without going through the pipeline."""

@@ -41,7 +41,7 @@ class LLMRequest(BaseModel):
 
         Two identical requests produce the same key, so a recorded response can
         be replayed. Change the prompt and the key changes, so you get a cache
-        miss instead of a stale answer -- that is the property Phase 5 relies on.
+        miss instead of a stale answer. That is the property Phase 5 relies on.
         """
         blob = json.dumps(
             {
