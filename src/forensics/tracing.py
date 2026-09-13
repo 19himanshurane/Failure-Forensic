@@ -18,6 +18,9 @@ around an ordinary call to the four step functions, and each decorated step
 notices the open context, times itself, and appends its own Span -- the step
 functions themselves stay exactly as ignorant of tracing as runner.py's
 docstring insists they must be.
+
+Each step also opens a real OpenTelemetry span (see otel.py) alongside its own
+Span object -- "OpenTelemetry + custom spans", not one instead of the other.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from typing import Any, Callable, TypeVar
 
 from pydantic import BaseModel
 
+from . import otel
 from .errors import StepError
 from .llm import LLMClient, LLMRequest, LLMResponse
 from .models import Span
@@ -134,14 +138,27 @@ def traced_step(name: str) -> Callable[[F], F]:
             snapshot = _serialize_input(fn, args, kwargs)
             before = len(ctx.recorder.calls)
             started = time.perf_counter()
-            try:
-                output = fn(*args, **kwargs)
-                error = None
-            except StepError as exc:
-                output, error = None, exc
-            latency_ms = (time.perf_counter() - started) * 1000
-            call = ctx.recorder.calls[-1] if len(ctx.recorder.calls) > before else None
-            ctx.spans.append(_make_span(name, latency_ms, snapshot, output, error, call))
+            with otel.span(f"forensics.step.{name}") as otel_span:
+                try:
+                    output = fn(*args, **kwargs)
+                    error = None
+                except StepError as exc:
+                    output, error = None, exc
+                latency_ms = (time.perf_counter() - started) * 1000
+                call = ctx.recorder.calls[-1] if len(ctx.recorder.calls) > before else None
+                span = _make_span(name, latency_ms, snapshot, output, error, call)
+                ctx.spans.append(span)
+
+                otel_span.set_attribute("forensics.step", name)
+                otel_span.set_attribute("forensics.latency_ms", latency_ms)
+                if span.confidence is not None:
+                    otel_span.set_attribute("forensics.confidence", span.confidence)
+                if span.model:
+                    otel_span.set_attribute("forensics.model", span.model)
+                if span.cache_key:
+                    otel_span.set_attribute("forensics.cache_key", span.cache_key)
+                if error is not None:
+                    otel.mark_error(otel_span, error.message, error)
 
             if error is not None:
                 raise error

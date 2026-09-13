@@ -9,6 +9,7 @@ arguments as run_pipeline, and turn what came out of the context into a Trace.
 
 from __future__ import annotations
 
+from .. import otel
 from ..analysis import find_propagation_drop
 from ..errors import StepError
 from ..llm import LLMClient, build_client
@@ -43,21 +44,22 @@ def run_traced_pipeline(raw_text: str, source_name: str,
     """
     recorder = RecordingLLMClient(client or build_client())
 
-    with trace_context(recorder) as spans:
-        document = None
-        result = None
-        ok = True
-        try:
-            document = intake(raw_text, source_name)
-            extraction = extract(document, recorder)
-            classification = classify(document, extraction, recorder)
-            summary = summarize(document, extraction, classification, recorder)
-            result = PipelineResult(
-                document=document, extraction=extraction,
-                classification=classification, summary=summary,
-            )
-        except StepError:
-            ok = False
+    with otel.span("forensics.pipeline.run", **{"forensics.source_name": source_name}):
+        with trace_context(recorder) as spans:
+            document = None
+            result = None
+            ok = True
+            try:
+                document = intake(raw_text, source_name)
+                extraction = extract(document, recorder)
+                classification = classify(document, extraction, recorder)
+                summary = summarize(document, extraction, classification, recorder)
+                result = PipelineResult(
+                    document=document, extraction=extraction,
+                    classification=classification, summary=summary,
+                )
+            except StepError:
+                ok = False
 
     return Trace(
         source_name=source_name,
